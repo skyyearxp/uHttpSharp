@@ -104,7 +104,7 @@ if "%CHANGE_DEFAULT_TARGETFRAMEWORK%"=="true" (
 
 :DONE
 echo.=========================
-echo.[%time:~0,8% INFO] DONE
+echo.[%time:~0,8% INFO] BUILD DONE
 
 if "%IS_CI_BUILD%"=="false" (
 	pause
@@ -127,7 +127,7 @@ REM - -------------------------------------
 :ENDINERROR
 
 echo.=========================
-echo.[%time:~0,8% ERRO] ERRORLEVEL = %errorlevel%
+echo.[%time:~0,8% ERRO] BUILD ENDED IN ERROR, ERRORLEVEL = %errorlevel%
 
 if "%IS_CI_BUILD%"=="false" (
 	pause

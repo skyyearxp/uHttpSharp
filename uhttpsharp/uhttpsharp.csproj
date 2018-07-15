@@ -3,8 +3,8 @@
   <PropertyGroup  Label="Basic info">    
     <!-- Exe or Library-->
     <OutputType>Library</OutputType>
-    <AssemblyName>uhttpsharp</AssemblyName>
-    <RootNamespace>$(AssemblyName)</RootNamespace>
+    <AssemblyName>uHttpSharp</AssemblyName>
+    <RootNamespace>uhttpsharp</RootNamespace>
     <!-- Assembly.GetExecutingAssembly().GetName().Version = $(VersionPrefix) but completed if necessary to make a 4 digit version -->
     <!-- FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion = $(VersionPrefix)-$(VersionSuffix) -->
     <Version>1.0.0-rc</Version>

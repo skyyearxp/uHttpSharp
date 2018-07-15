@@ -1,59 +1,53 @@
 ﻿# µHttpSharp
 
-A very lightweight & simple embedded http server for c# 
+A very lightweight & simple embedded http server for c#
 
-Master | Provider
+Status | Info
 ------ | --------
-[![Build Status][TeamCityImgMaster]][TeamCityLinkMaster] | Windows CI Provided By [JetBrains][] and [CodeBetter][]
-[![Build status](https://ci.appveyor.com/api/projects/status/1schhjbpx7oomrx7)](https://ci.appveyor.com/project/shanielh/uHttpSharp) | Windows CI Provided By [AppVeyor][]
-[![Build Status][MonoImgMaster]][MonoLinkMaster] | Mono CI Provided by [travis-ci][] 
+[![Build status](https://ci.appveyor.com/api/projects/status/gqwprtv98rcaykqo?svg=true)](https://ci.appveyor.com/project/jcaillon/uhttpsharp) | Windows CI Provided By [AppVeyor][]
+![NuGet](https://img.shields.io/nuget/v/Noyacode.uHttpSharp.svg) | Latest [Nuget][] Package
 
-[TeamCityImgMaster]:http://teamcity.codebetter.com/app/rest/builds/buildType:\(id:bt1191\)/statusIcon
-[TeamCityLinkMaster]:http://teamcity.codebetter.com/viewLog.html?buildTypeId=bt1191&buildId=lastFinished&guest=1
-
-[MonoImgMaster]:https://travis-ci.org/Code-Sharp/uHttpSharp.png?branch=master
-[MonoLinkMaster]:https://travis-ci.org/Code-Sharp/uHttpSharp
-
-[travis-ci]:https://travis-ci.org/
 [AppVeyor]:http://www.appveyor.com/
-[JetBrains]:http://www.jetbrains.com/
-[CodeBetter]:http://codebetter.com/
+[Nuget]:https://www.nuget.org/packages/Noyacode.uHttpSharp/
 
 ## Usage
 
-A [NuGet Package](https://www.nuget.org/packages/uHttpSharp/ "Go to µHttpSharp NuGet Package page")  is available, Install via NuGet Package Manager :
+A [NuGet Package](https://www.nuget.org/packages/Noyacode.uHttpSharp/ "Go to µHttpSharp NuGet Package page")  is available, Install via NuGet Package Manager :
 
-	install-package uHttpSharp
+```ps1
+install-package uHttpSharp
+```
 
-A sample for usage : 
+A sample for usage :
 
-	using (var httpServer = new HttpServer(new HttpRequestProvider()))
-	{
-		// Normal port 80 :
-		httpServer.Use(new TcpListenerAdapter(new TcpListener(IPAddress.Loopback, 80)));
-        
-		// Ssl Support :
-		var serverCertificate = X509Certificate.CreateFromCertFile(@"TempCert.cer");
-		httpServer.Use(new ListenerSslDecorator(new TcpListenerAdapter(new TcpListener(IPAddress.Loopback, 443)), serverCertificate));
+```cs
+using (var httpServer = new HttpServer(new HttpRequestProvider()))
+{
+    // Normal port 80 :
+    httpServer.Use(new TcpListenerAdapter(new TcpListener(IPAddress.Loopback, 80)));
 
-		// Request handling : 
-		httpServer.Use((context, next) => {
-			Console.WriteLine("Got Request!");
-			return next();
-		});
+    // Ssl Support :
+    var serverCertificate = X509Certificate.CreateFromCertFile(@"TempCert.cer");
+    httpServer.Use(new ListenerSslDecorator(new TcpListenerAdapter(new TcpListener(IPAddress.Loopback, 443)), serverCertificate));
 
-		// Handler classes : 
-		httpServer.Use(new TimingHandler());
-		httpServer.Use(new HttpRouter().With(string.Empty, new IndexHandler())
-										.With("about", new AboutHandler()));
-		httpServer.Use(new FileHandler());
-		httpServer.Use(new ErrorHandler());
-		
-		httpServer.Start();
-		
-		Console.ReadLine();
-	}
-	
+    // Request handling :
+    httpServer.Use((context, next) => {
+        Console.WriteLine("Got Request!");
+        return next();
+    });
+
+    // Handler classes :
+    httpServer.Use(new TimingHandler());
+    httpServer.Use(new HttpRouter().With(string.Empty, new IndexHandler()).With("about", new AboutHandler()));
+    httpServer.Use(new FileHandler());
+    httpServer.Use(new ErrorHandler());
+
+    httpServer.Start();
+
+    Console.ReadLine();
+}
+```
+
 ## Features
 
 µHttpSharp is a simple http server inspired by [koa](http://koajs.com), and has the following features :
@@ -67,62 +61,64 @@ A sample for usage :
 
 µHttpSharp manages to handle **13000 requests a sec** (With Keep-Alive support) on core i5 machine, cpu goes to 27%, memory consumption and number of threads is stable.
 
-	ab -n 10000 -c 50 -k -s 2 http://localhost:8000/
-	
-	This is ApacheBench, Version 2.3 <$Revision: 1528965 $>
-	Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
-	Licensed to The Apache Software Foundation, http://www.apache.org/
+```text
+ab -n 10000 -c 50 -k -s 2 http://localhost:8000/
 
-	Benchmarking localhost (be patient)
-	Completed 1000 requests
-	Completed 2000 requests
-	Completed 3000 requests
-	Completed 4000 requests
-	Completed 5000 requests
-	Completed 6000 requests
-	Completed 7000 requests
-	Completed 8000 requests
-	Completed 9000 requests
+This is ApacheBench, Version 2.3 <$Revision: 1528965 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking localhost (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
 
 
-	Server Software:
-	Server Hostname:        localhost
-	Server Port:            8000
+Server Software:
+Server Hostname:        localhost
+Server Port:            8000
 
-	Document Path:          /
-	Document Length:        21 bytes
+Document Path:          /
+Document Length:        21 bytes
 
-	Concurrency Level:      50
-	Time taken for tests:   0.707 seconds
-	Complete requests:      9357
-	Failed requests:        0
-	Keep-Alive requests:    9363
-	Total transferred:      1507527 bytes
-	HTML transferred:       196644 bytes
-	Requests per second:    13245.36 [#/sec] (mean)
-	Time per request:       3.775 [ms] (mean)
-	Time per request:       0.075 [ms] (mean, across all concurrent requests)
-	Transfer rate:          2083.53 [Kbytes/sec] received
+Concurrency Level:      50
+Time taken for tests:   0.707 seconds
+Complete requests:      9357
+Failed requests:        0
+Keep-Alive requests:    9363
+Total transferred:      1507527 bytes
+HTML transferred:       196644 bytes
+Requests per second:    13245.36 [#/sec] (mean)
+Time per request:       3.775 [ms] (mean)
+Time per request:       0.075 [ms] (mean, across all concurrent requests)
+Transfer rate:          2083.53 [Kbytes/sec] received
 
-	Connection Times (ms)
-				  min  mean[+/-sd] median   max
-	Connect:        0    0   0.0      0       1
-	Processing:     1    4   0.7      4      13
-	Waiting:        1    4   0.7      4      13
-	Total:          1    4   0.7      4      13
+Connection Times (ms)
+                min  mean[+/-sd] median   max
+Connect:        0    0   0.0      0       1
+Processing:     1    4   0.7      4      13
+Waiting:        1    4   0.7      4      13
+Total:          1    4   0.7      4      13
 
-	Percentage of the requests served within a certain time (ms)
-	  50%      4
-	  66%      4
-	  75%      4
-	  80%      4
-	  90%      4
-	  95%      4
-	  98%      5
-	  99%      9
-	 100%      4 (longest request)
+Percentage of the requests served within a certain time (ms)
+    50%      4
+    66%      4
+    75%      4
+    80%      4
+    90%      4
+    95%      4
+    98%      5
+    99%      9
+    100%      4 (longest request)
+```
 
-## How To Contribute?
+## How To Contribute
 
 * Use it
 * Open Issues
