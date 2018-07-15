@@ -18,76 +18,59 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading.Tasks;
 using uhttpsharp.Listeners;
 using uhttpsharp.RequestProviders;
-using uhttpsharp.Logging;
 
-namespace uhttpsharp
-{
-    public sealed class HttpServer : IDisposable
-    {
-        private static readonly ILog Logger = LogProvider.GetCurrentClassLogger();
-
-        private bool _isActive;
-
+namespace uhttpsharp {
+    public sealed class HttpServer : IDisposable {
         private readonly IList<IHttpRequestHandler> _handlers = new List<IHttpRequestHandler>();
         private readonly IList<IHttpListener> _listeners = new List<IHttpListener>();
         private readonly IHttpRequestProvider _requestProvider;
 
+        private bool _isActive;
+        private ILogger _logger;
 
-        public HttpServer(IHttpRequestProvider requestProvider)
-        {
+        public HttpServer(IHttpRequestProvider requestProvider, ILogger log = null) {
             _requestProvider = requestProvider;
+            _logger = log;
         }
 
-        public void Use(IHttpRequestHandler handler)
-        {
+        public void Dispose() {
+            _isActive = false;
+        }
+
+        public void Use(IHttpRequestHandler handler) {
             _handlers.Add(handler);
         }
 
-        public void Use(IHttpListener listener)
-        {
+        public void Use(IHttpListener listener) {
             _listeners.Add(listener);
         }
 
-        public void Start()
-        {
+        public void Start() {
             _isActive = true;
 
-            foreach (var listener in _listeners)
-            {
-                IHttpListener tempListener = listener;
+            foreach (var listener in _listeners) {
+                var tempListener = listener;
 
                 Task.Factory.StartNew(() => Listen(tempListener));
             }
 
-            Logger.InfoFormat("Embedded uhttpserver started.");
+            _logger?.Info("Embedded uhttpserver started.");
         }
 
-        private async void Listen(IHttpListener listener)
-        {
+        private async void Listen(IHttpListener listener) {
             var aggregatedHandler = _handlers.Aggregate();
 
             while (_isActive)
-            {
-                try
-                {
-                    new HttpClientHandler(await listener.GetClient().ConfigureAwait(false), aggregatedHandler, _requestProvider);
+                try {
+                    new HttpClientHandler(await listener.GetClient().ConfigureAwait(false), aggregatedHandler, _requestProvider, _logger);
+                } catch (Exception e) {
+                    _logger?.Warn($"Error while getting client", e);
                 }
-                catch (Exception e)
-                {
-                    Logger.WarnException("Error while getting client", e);
-                }
-            }
 
-            Logger.InfoFormat("Embedded uhttpserver stopped.");
-        }
-
-        public void Dispose()
-        {
-            _isActive = false;
+            _logger?.Info("Embedded uhttpserver stopped.");
         }
     }
 }

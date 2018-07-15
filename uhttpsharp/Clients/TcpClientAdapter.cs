@@ -2,48 +2,22 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace uhttpsharp.Clients
-{
-    public class TcpClientAdapter : IClient
-    {
+namespace uhttpsharp.Clients {
+    public class TcpClientAdapter : IClient {
         private readonly TcpClient _client;
-        private readonly NetworkStream _stream;
 
-        public TcpClientAdapter(TcpClient client)
-        {
+        public TcpClientAdapter(TcpClient client) {
             _client = client;
-            _stream = _client.GetStream();
-
-            // The next lines are commented out because they caused exceptions, 
-            // They have been added because .net doesn't allow me to wait for data (ReadAsyncBlock).
-            // Instead, I've added Task.Delay in MyStreamReader.ReadBuffer when
-            // Read returns without data.
-            
-            // See https://github.com/Code-Sharp/uHttpSharp/issues/14
-            
-            // Read Timeout of one second.
-            // _stream.ReadTimeout = 1000;
         }
 
-        public Stream Stream
-        {
-            get { return _stream; }
-        }
+        public Stream Stream => _client.GetStream();
 
-        public bool Connected
-        {
-            get { return _client.Connected; }
-        }
+        public bool Connected => _client.Connected;
 
-        public void Close()
-        {
+        public void Close() {
             _client.Close();
         }
 
-
-        public EndPoint RemoteEndPoint
-        {
-            get { return _client.Client.RemoteEndPoint; }
-        }
+        public EndPoint RemoteEndPoint => _client.Client.RemoteEndPoint;
     }
 }

@@ -6,10 +6,8 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
 
-namespace uhttpsharp.Handlers
-{
-    public class ClassRouter : IHttpRequestHandler
-    {
+namespace uhttpsharp.Handlers {
+    public class ClassRouter : IHttpRequestHandler {
         private static readonly object SyncRoot = new object();
 
         private static readonly HashSet<Type> LoadedRoutes = new HashSet<Type>();
@@ -22,63 +20,26 @@ namespace uhttpsharp.Handlers
 
         private readonly IHttpRequestHandler _root;
 
-        public ClassRouter(IHttpRequestHandler root)
-        {
+        public ClassRouter(IHttpRequestHandler root) {
             _root = root;
             LoadRoute(_root);
         }
 
-        private void LoadRoute(IHttpRequestHandler root)
-        {
-            var rootType = root.GetType();
-
-            if (LoadedRoutes.Contains(rootType))
-            {
-                return;
-            }
-
-            lock (SyncRoot)
-            {
-                if (LoadedRoutes.Add(rootType))
-                {
-                    var routes = GetRoutesOfHandler(rootType);
-                    foreach (var route in routes)
-                    {
-                        var tuple = Tuple.Create(rootType, route.Name);
-                        var value = CreateRoute(tuple);
-                        Routers.Add(tuple, value);
-                    }
-                }
-            }
-        }
-        private IEnumerable<PropertyInfo> GetRoutesOfHandler(Type type)
-        {
-            return type
-                   .GetProperties()
-                   .Where(p => typeof(IHttpRequestHandler).IsAssignableFrom(p.PropertyType));
-        }
-
-        public async Task Handle(IHttpContext context, Func<Task> next)
-        {
+        public async Task Handle(IHttpContext context, Func<Task> next) {
             var handler = _root;
 
-            foreach (var parameter in context.Request.RequestParameters)
-            {
+            foreach (var parameter in context.Request.RequestParameters) {
                 Func<IHttpRequestHandler, IHttpRequestHandler> getNextHandler;
 
                 LoadRoute(handler);
 
-                if (Routers.TryGetValue(Tuple.Create(handler.GetType(), parameter), out getNextHandler))
-                {
+                if (Routers.TryGetValue(Tuple.Create(handler.GetType(), parameter), out getNextHandler)) {
                     handler = getNextHandler(handler);
-                }
-                else
-                {
+                } else {
                     var getNextByIndex = IndexerRouters.GetOrAdd(handler.GetType(), GetIndexerRouter);
 
                     if (getNextByIndex == null) //Indexer is not found
                     {
-
                         await next().ConfigureAwait(false);
                         return;
                     }
@@ -95,8 +56,7 @@ namespace uhttpsharp.Handlers
                 }
 
                 // Incase that one of the methods returned null (Indexer / Getter)
-                if (handler == null)
-                {
+                if (handler == null) {
                     await next().ConfigureAwait(false);
                     return;
                 }
@@ -105,20 +65,37 @@ namespace uhttpsharp.Handlers
             await handler.Handle(context, next).ConfigureAwait(false);
         }
 
-        private Func<IHttpContext, IHttpRequestHandler, string, Task<IHttpRequestHandler>> GetIndexerRouter(Type arg)
-        {
+        private void LoadRoute(IHttpRequestHandler root) {
+            var rootType = root.GetType();
+
+            if (LoadedRoutes.Contains(rootType)) return;
+
+            lock (SyncRoot) {
+                if (LoadedRoutes.Add(rootType)) {
+                    var routes = GetRoutesOfHandler(rootType);
+                    foreach (var route in routes) {
+                        var tuple = Tuple.Create(rootType, route.Name);
+                        var value = CreateRoute(tuple);
+                        Routers.Add(tuple, value);
+                    }
+                }
+            }
+        }
+
+        private IEnumerable<PropertyInfo> GetRoutesOfHandler(Type type) {
+            return type
+                .GetProperties()
+                .Where(p => typeof(IHttpRequestHandler).IsAssignableFrom(p.PropertyType));
+        }
+
+        private Func<IHttpContext, IHttpRequestHandler, string, Task<IHttpRequestHandler>> GetIndexerRouter(Type arg) {
             var indexer = GetIndexer(arg);
 
-            if (indexer == null)
-            {
-                return null;
-            }
+            if (indexer == null) return null;
             return CreateIndexerFunction<IHttpRequestHandler>(arg, indexer);
         }
-        internal static Func<IHttpContext, T, string, Task<T>> CreateIndexerFunction<T>(Type arg, MethodInfo indexer)
-        {
-            AssertIndexerParameters<T>(indexer);
 
+        internal static Func<IHttpContext, T, string, Task<T>> CreateIndexerFunction<T>(Type arg, MethodInfo indexer) {
             var parameterType = indexer.GetParameters()[1].ParameterType;
 
             var httpContext = Expression.Parameter(typeof(IHttpContext), "context");
@@ -129,21 +106,18 @@ namespace uhttpsharp.Handlers
 
             Expression body;
 
-            if (tryParseMethod == null)
-            {
+            if (tryParseMethod == null) {
                 var handlerConverted = Expression.Convert(inputHandler, arg);
                 var objectConverted =
                     Expression.Convert(
                         Expression.Call(typeof(Convert).GetMethod("ChangeType", new[] {typeof(object), typeof(Type)}), inputObject,
                             Expression.Constant(parameterType)), parameterType);
 
-                var indexerExpression = Expression.Call (handlerConverted, indexer, httpContext, objectConverted);
-                var returnValue = Expression.Convert (indexerExpression, typeof(Task<T>));
+                var indexerExpression = Expression.Call(handlerConverted, indexer, httpContext, objectConverted);
+                var returnValue = Expression.Convert(indexerExpression, typeof(T));
 
                 body = returnValue;
-            }
-            else
-            {
+            } else {
                 var inputConvertedVar = Expression.Variable(parameterType, "inputObjectConverted");
 
                 var handlerConverted = Expression.Convert(inputHandler, arg);
@@ -161,7 +135,7 @@ namespace uhttpsharp.Handlers
                             Expression.Call(tryParseMethod, inputObject,
                                 inputConvertedVar),
                             Expression.Return(returnTarget, returnValue)
-                            ),
+                        ),
                         returnLabel);
             }
 
@@ -170,62 +144,30 @@ namespace uhttpsharp.Handlers
                     inputHandler,
                     inputObject).Compile();
         }
-        private static void AssertIndexerParameters<T>(MethodInfo methodInfo)
-        {
-            var parameters = methodInfo.GetParameters();
 
-            if (parameters.Length != 2 || parameters[0].ParameterType != typeof(IHttpContext))
-            {
-                throw new ArgumentException(
-                    string.Format(
-                        "Indexer Method ({2}.{3}) should always receive two parameters, The first one should be of type {0} and the second should be of primitive type (string, int, long, etc'). Also, It must return {1}.",
-                        typeof(IHttpContext).FullName, typeof(Task<T>).FullName, methodInfo.DeclaringType, methodInfo.Name));
-            }
-
-            if (methodInfo.ReturnType != typeof(Task<T>))
-            {
-                throw new ArgumentException(string.Format("Indexer method should always return {0}.", typeof(Task<T>).FullName));
-            }
-        }
-        private MethodInfo GetIndexer(Type arg)
-        {
+        private MethodInfo GetIndexer(Type arg) {
             var indexer =
                 arg.GetMethods().SingleOrDefault(m => Attribute.IsDefined(m, typeof(IndexerAttribute))
-                                             && m.GetParameters().Length == 2
-                                             && typeof(Task<IHttpRequestHandler>).IsAssignableFrom(m.ReturnType));
+                                                      && m.GetParameters().Length == 2
+                                                      && typeof(Task<IHttpRequestHandler>).IsAssignableFrom(m.ReturnType));
 
             return indexer;
         }
-        private Func<IHttpRequestHandler, IHttpRequestHandler> CreateRoute(Tuple<Type, string> arg)
-        {
+
+        private Func<IHttpRequestHandler, IHttpRequestHandler> CreateRoute(Tuple<Type, string> arg) {
             var parameter = Expression.Parameter(typeof(IHttpRequestHandler), "input");
             var converted = Expression.Convert(parameter, arg.Item1);
 
             var propertyInfo = arg.Item1.GetProperty(arg.Item2);
 
-            if (propertyInfo == null)
-            {
-                return null;
-            }
+            if (propertyInfo == null) return null;
 
             var property = Expression.Property(converted, propertyInfo);
             var propertyConverted = Expression.Convert(property, typeof(IHttpRequestHandler));
 
-            return Expression.Lambda<Func<IHttpRequestHandler, IHttpRequestHandler>>(propertyConverted, new[] { parameter }).Compile();
+            return Expression.Lambda<Func<IHttpRequestHandler, IHttpRequestHandler>>(propertyConverted, parameter).Compile();
         }
     }
 
-    public class IndexerAttribute : Attribute
-    {
-        private readonly int _precedence;
-
-        public IndexerAttribute(int precedence = 0)
-        {
-            _precedence = precedence;
-        }
-        public int Precedence
-        {
-            get { return _precedence; }
-        }
-    }
+    public class IndexerAttribute : Attribute { }
 }

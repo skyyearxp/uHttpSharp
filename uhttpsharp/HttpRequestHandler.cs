@@ -19,10 +19,8 @@
 using System;
 using System.Threading.Tasks;
 
-namespace uhttpsharp
-{
-    public interface IHttpRequestHandler
-    {
+namespace uhttpsharp {
+    public interface IHttpRequestHandler {
         Task Handle(IHttpContext context, Func<Task> next);
     }
 }

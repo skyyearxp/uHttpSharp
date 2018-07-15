@@ -16,268 +16,201 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-using System.Text;
-using System.Net;
-using System.Reflection;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Net.Sockets;
+using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using uhttpsharp.Clients;
 using uhttpsharp.Headers;
 using uhttpsharp.RequestProviders;
-using uhttpsharp.Logging;
 
-namespace uhttpsharp
-{
-    internal sealed class HttpClientHandler
-    {
+namespace uhttpsharp {
+    internal sealed class HttpClientHandler {
         private const string CrLf = "\r\n";
         private static readonly byte[] CrLfBuffer = Encoding.UTF8.GetBytes(CrLf);
 
-        private static readonly ILog Logger = LogProvider.GetCurrentClassLogger();
-        
-        private readonly IClient _client;
+        private readonly ILogger _logger;
+        private readonly EndPoint _remoteEndPoint;
         private readonly Func<IHttpContext, Task> _requestHandler;
         private readonly IHttpRequestProvider _requestProvider;
-        private readonly EndPoint _remoteEndPoint;
-        private DateTime _lastOperationTime;
         private readonly Stream _stream;
 
-        public HttpClientHandler(IClient client, Func<IHttpContext, Task> requestHandler, IHttpRequestProvider requestProvider)
-        {
+        public IClient Client { get; }
+
+        public DateTime LastOperationTime { get; private set; }
+
+        public HttpClientHandler(IClient client, Func<IHttpContext, Task> requestHandler, IHttpRequestProvider requestProvider, ILogger logger = null) {
             _remoteEndPoint = client.RemoteEndPoint;
-            _client = client;
+            Client = client;
             _requestHandler = requestHandler;
             _requestProvider = requestProvider;
+            _logger = logger;
 
-            _stream = new BufferedStream(_client.Stream, 8096);
-            
-            Logger.InfoFormat("Got Client {0}", _remoteEndPoint);
+            _stream = new BufferedStream(Client.Stream, 8192);
+
+            _logger?.Debug($"Got Client {_remoteEndPoint}");
 
             Task.Factory.StartNew(Process);
 
             UpdateLastOperationTime();
         }
 
-        private async void Process()
-        {
-            try
-            {
-                while (_client.Connected)
-                {
+        private async void Process() {
+            try {
+                while (Client.Connected) {
                     // TODO : Configuration.
-                    var limitedStream = new NotFlushingStream(new LimitedStream(_stream));
+                    var limitedStream = new NotFlushingStream(new LimitedStream(_stream, 1024 * 1024, 1024 * 1024));
+                    var streamReader = new StreamReader(limitedStream);
 
+                    var request = await _requestProvider.Provide(streamReader).ConfigureAwait(false);
 
-
-                    var request = await _requestProvider.Provide(new MyStreamReader(limitedStream)).ConfigureAwait(false);
-
-                    if (request != null)
-                    {
+                    if (request != null) {
                         UpdateLastOperationTime();
 
-                        var context = new HttpContext(request, _client.RemoteEndPoint);
+                        var context = new HttpContext(request, Client.RemoteEndPoint);
 
-                        Logger.InfoFormat("{1} : Got request {0}", request.Uri, _client.RemoteEndPoint);
-
+                        _logger?.Debug($"{Client.RemoteEndPoint} : Got request {request.Uri}");
 
                         await _requestHandler(context).ConfigureAwait(false);
 
-                        if (context.Response != null)
-                        {
-                            var streamWriter = new StreamWriter(limitedStream) { AutoFlush = false };
-                            streamWriter.NewLine = "\r\n";
+                        if (context.Response != null) {
+                            var streamWriter = new StreamWriter(limitedStream) {AutoFlush = false};
+
                             await WriteResponse(context, streamWriter).ConfigureAwait(false);
                             await limitedStream.ExplicitFlushAsync().ConfigureAwait(false);
 
-                            if (!request.Headers.KeepAliveConnection() || context.Response.CloseConnection)
-                            {
-                                _client.Close();
-                            }
+                            if (!request.Headers.KeepAliveConnection() || context.Response.CloseConnection) Client.Close();
                         }
 
                         UpdateLastOperationTime();
-                    }
-                    else
-                    {
-                        _client.Close();
+                    } else {
+                        Client.Close();
                     }
                 }
-            }
-            catch (Exception e)
-            {
+            } catch (Exception e) {
                 // Hate people who make bad calls.
-                Logger.WarnException(string.Format("Error while serving : {0}", _remoteEndPoint), e);
-                _client.Close();
+                _logger?.Warn($"Error while serving : {_remoteEndPoint}", e);
+                Client.Close();
             }
 
-            Logger.InfoFormat("Lost Client {0}", _remoteEndPoint);
+            _logger?.Debug($"Lost Client {_remoteEndPoint}");
         }
-        private async Task WriteResponse(HttpContext context, StreamWriter writer)
-        {
-            IHttpResponse response = context.Response;
-            IHttpRequest request = context.Request;
-    
+
+        private async Task WriteResponse(HttpContext context, StreamWriter writer) {
+            var response = context.Response;
+            var request = context.Request;
+
             // Headers
             await writer.WriteLineAsync(string.Format("HTTP/1.1 {0} {1}",
-                (int)response.ResponseCode,
-                response.ResponseCode))
+                    (int) response.ResponseCode,
+                    response.ResponseCode))
                 .ConfigureAwait(false);
-            
-            foreach (var header in response.Headers)
-            {
-                await writer.WriteLineAsync(string.Format("{0}: {1}", header.Key, header.Value)).ConfigureAwait(false);
-            }
+
+            foreach (var header in response.Headers) await writer.WriteLineAsync(string.Format("{0}: {1}", header.Key, header.Value)).ConfigureAwait(false);
 
             // Cookies
             if (context.Cookies.Touched)
-            {
                 await writer.WriteAsync(context.Cookies.ToCookieData())
                     .ConfigureAwait(false);
-            }
 
             // Empty Line
             await writer.WriteLineAsync().ConfigureAwait(false);
-            writer.Flush();
 
             // Body
             await response.WriteBody(writer).ConfigureAwait(false);
             await writer.FlushAsync().ConfigureAwait(false);
-            
         }
 
-        public IClient Client
-        {
-            get { return _client; }
+        public void ForceClose() {
+            Client.Close();
         }
 
-        public void ForceClose()
-        {
-            _client.Close();
+        private void UpdateLastOperationTime() {
+            LastOperationTime = DateTime.Now;
         }
-
-        public DateTime LastOperationTime
-        {
-            get
-            {
-                return _lastOperationTime;
-            }
-        }
-
-        private void UpdateLastOperationTime()
-        {
-            // _lastOperationTime = DateTime.Now;
-        }
-
     }
 
-    internal class NotFlushingStream : Stream
-    {
+    internal class NotFlushingStream : Stream {
         private readonly Stream _child;
-        public NotFlushingStream(Stream child)
-        {
+
+        public override bool CanRead => _child.CanRead;
+
+        public override bool CanSeek => _child.CanSeek;
+
+        public override bool CanWrite => _child.CanWrite;
+
+        public override long Length => _child.Length;
+
+        public override long Position {
+            get => _child.Position;
+            set => _child.Position = value;
+        }
+
+        public override int ReadTimeout {
+            get => _child.ReadTimeout;
+            set => _child.ReadTimeout = value;
+        }
+
+        public override int WriteTimeout {
+            get => _child.WriteTimeout;
+            set => _child.WriteTimeout = value;
+        }
+
+        public NotFlushingStream(Stream child) {
             _child = child;
         }
 
-
-        public void ExplicitFlush()
-        {
+        public void ExplicitFlush() {
             _child.Flush();
         }
 
-        public Task ExplicitFlushAsync()
-        {
+        public Task ExplicitFlushAsync() {
             return _child.FlushAsync();
         }
 
-        public override void Flush()
-        {
+        public override void Flush() {
             // _child.Flush();
         }
 
-        public override long Seek(long offset, SeekOrigin origin)
-        {
+        public override long Seek(long offset, SeekOrigin origin) {
             return _child.Seek(offset, origin);
         }
-        public override void SetLength(long value)
-        {
+
+        public override void SetLength(long value) {
             _child.SetLength(value);
         }
-        public override int Read(byte[] buffer, int offset, int count)
-        {
+
+        public override int Read(byte[] buffer, int offset, int count) {
             return _child.Read(buffer, offset, count);
         }
 
-        public override int ReadByte()
-        {
+        public override int ReadByte() {
             return _child.ReadByte();
         }
-        public override void Write(byte[] buffer, int offset, int count)
-        {
+
+        public override void Write(byte[] buffer, int offset, int count) {
             _child.Write(buffer, offset, count);
         }
-        public override void WriteByte(byte value)
-        {
-            _child.WriteByte(value);
-        }
-        public override bool CanRead
-        {
-            get { return _child.CanRead; }
-        }
-        public override bool CanSeek
-        {
-            get { return _child.CanSeek; }
-        }
 
-        public override bool CanWrite
-        {
-            get { return _child.CanWrite; }
-        }
-        public override long Length
-        {
-            get { return _child.Length; }
-        }
-        public override long Position
-        {
-            get { return _child.Position; }
-            set { _child.Position = value; }
-        }
-        public override int ReadTimeout
-        {
-            get { return _child.ReadTimeout; }
-            set { _child.ReadTimeout = value; }
-        }
-        public override int WriteTimeout
-        {
-            get { return _child.WriteTimeout; }
-            set { _child.WriteTimeout = value; }
+        public override void WriteByte(byte value) {
+            _child.WriteByte(value);
         }
     }
 
-    public static class RequestHandlersAggregateExtensions
-    {
-
-        public static Func<IHttpContext, Task> Aggregate(this IList<IHttpRequestHandler> handlers)
-        {
+    public static class RequestHandlersAggregateExtensions {
+        public static Func<IHttpContext, Task> Aggregate(this IList<IHttpRequestHandler> handlers) {
             return handlers.Aggregate(0);
         }
 
-        private static Func<IHttpContext, Task> Aggregate(this IList<IHttpRequestHandler> handlers, int index)
-        {
-            if (index == handlers.Count)
-            {
-                return null;
-            }
+        private static Func<IHttpContext, Task> Aggregate(this IList<IHttpRequestHandler> handlers, int index) {
+            if (index == handlers.Count) return null;
 
             var currentHandler = handlers[index];
             var nextHandler = handlers.Aggregate(index + 1);
-            
+
             return context => currentHandler.Handle(context, () => nextHandler(context));
         }
-
-
     }
 }

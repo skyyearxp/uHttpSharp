@@ -1,9 +1,5 @@
-namespace uhttpsharp.Controllers
-{
-    public interface IValidate
-    {
-
+namespace uhttpsharp.Controllers {
+    public interface IValidate {
         void Validate(IErrorContainer container);
-
     }
 }

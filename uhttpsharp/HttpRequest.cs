@@ -21,82 +21,43 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using uhttpsharp.Headers;
 
-namespace uhttpsharp
-{
+namespace uhttpsharp {
     [DebuggerDisplay("{Method} {OriginalUri,nq}")]
-    internal class HttpRequest : IHttpRequest
-    {
-        private readonly IHttpHeaders _headers;
-        private readonly HttpMethods _method;
-        private readonly string _protocol;
-        private readonly Uri _uri;
-        private readonly string[] _requestParameters;
-        private readonly IHttpHeaders _queryString;
-        private readonly IHttpPost _post;
-
-        public HttpRequest(IHttpHeaders headers, HttpMethods method, string protocol, Uri uri, string[] requestParameters, IHttpHeaders queryString, IHttpPost post)
-        {
-            _headers = headers;
-            _method = method;
-            _protocol = protocol;
-            _uri = uri;
-            _requestParameters = requestParameters;
-            _queryString = queryString;
-            _post = post;
-        }
-
-        public IHttpHeaders Headers
-        {
-            get { return _headers; }
-        }
-
-        public HttpMethods Method
-        {
-            get { return _method; }
-        }
-
-        public string Protocol
-        {
-            get { return _protocol; }
-        }
-
-        public Uri Uri
-        {
-            get { return _uri; }
-        }
-
-        public string[] RequestParameters
-        {
-            get { return _requestParameters; }
-        }
-
-        public IHttpPost Post
-        {
-            get { return _post; }
-        }
-
-        public IHttpHeaders QueryString
-        {
-            get { return _queryString; }
-        }
-
-        internal string OriginalUri
-        {
-            get
-            {
-                if (QueryString == null)
-                {
-                    return Uri.OriginalString;    
-                }
+    internal class HttpRequest : IHttpRequest {
+        internal string OriginalUri {
+            get {
+                if (QueryString == null) return Uri.OriginalString;
 
                 return Uri.OriginalString + "?" + QueryString.ToUriData();
-
             }
         }
+
+        public HttpRequest(IHttpHeaders headers, HttpMethods method, string protocol, Uri uri, string[] requestParameters, IHttpHeaders queryString, IHttpPost post) {
+            Headers = headers;
+            Method = method;
+            Protocol = protocol;
+            Uri = uri;
+            RequestParameters = requestParameters;
+            QueryString = queryString;
+            Post = post;
+        }
+
+        public IHttpHeaders Headers { get; }
+
+        public HttpMethods Method { get; }
+
+        public string Protocol { get; }
+
+        public Uri Uri { get; }
+
+        public string[] RequestParameters { get; }
+
+        public IHttpPost Post { get; }
+
+        public IHttpHeaders QueryString { get; }
     }
 
-    public interface IHttpRequest
-    {
+    public interface IHttpRequest {
         IHttpHeaders Headers { get; }
 
         HttpMethods Method { get; }
@@ -107,36 +68,26 @@ namespace uhttpsharp
 
         string[] RequestParameters { get; }
 
-        IHttpPost Post {get;}
+        IHttpPost Post { get; }
 
         IHttpHeaders QueryString { get; }
-
     }
 
-    public interface IHttpPost
-    {
+    public interface IHttpPost {
+        byte[] Raw { get; }
 
-        byte[] Raw {get;}
-
-        IHttpHeaders Parsed {get;}
-
+        IHttpHeaders Parsed { get; }
     }
 
-    public sealed class HttpRequestParameters
-    {
+    public sealed class HttpRequestParameters {
+        private static readonly char[] Separators = {'/'};
         private readonly string[] _params;
 
-        private static readonly char[] Separators = { '/' };
+        public IList<string> Params => _params;
 
-        public HttpRequestParameters(Uri uri)
-        {
+        public HttpRequestParameters(Uri uri) {
             var url = uri.OriginalString;
             _params = url.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
-        }
-
-        public IList<string> Params
-        {
-            get { return _params; }
         }
     }
 }

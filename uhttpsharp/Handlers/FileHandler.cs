@@ -16,58 +16,65 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using uhttpsharp.Headers;
 
-namespace uhttpsharp.Handlers
-{
-    public class FileHandler : IHttpRequestHandler
-    {
+namespace uhttpsharp.Handlers {
+    public class FileHandler : IHttpRequestHandler {
+        public List<string> DefaultFiles = new List<string> {"index.html", "default.html"};
         public static string DefaultMimeType { get; set; }
         public static string HttpRootDirectory { get; set; }
-        public static IDictionary<string, string> MimeTypes { get; private set; }
 
-        static FileHandler()
-        {
+        public static IDictionary<string, string> MimeTypes { get; }
 
+        static FileHandler() {
             DefaultMimeType = "text/plain";
-            MimeTypes = new Dictionary<string, string>
-                            {
-                                {".css", "text/css"},
-                                {".gif", "image/gif"},
-                                {".htm", "text/html"},
-                                {".html", "text/html"},
-                                {".jpg", "image/jpeg"},
-                                {".js", "application/javascript"},
-                                {".png", "image/png"},
-                                {".xml", "application/xml"},
-                            };
+            MimeTypes = new Dictionary<string, string> {
+                {".css", "text/css"},
+                {".gif", "image/gif"},
+                {".htm", "text/html"},
+                {".html", "text/html"},
+                {".jpg", "image/jpeg"},
+                {".js", "application/javascript"},
+                {".png", "image/png"},
+                {".xml", "application/xml"}
+            };
         }
 
-        private string GetContentType(string path)
-        {
+        public async Task Handle(IHttpContext context, Func<Task> next) {
+            var requestPath = context.Request.Uri.OriginalString.TrimStart('/');
+
+            if (string.IsNullOrEmpty(requestPath)) requestPath = GetDefault();
+
+            var httpRoot = Path.GetFullPath(HttpRootDirectory ?? ".");
+            var path = Path.GetFullPath(Path.Combine(httpRoot, requestPath));
+
+            if (!File.Exists(path)) {
+                await next().ConfigureAwait(false);
+                return;
+            }
+
+            context.Response = new HttpResponse(GetContentType(path), File.OpenRead(path), context.Request.Headers.KeepAliveConnection());
+        }
+
+        private string GetContentType(string path) {
             var extension = Path.GetExtension(path) ?? string.Empty;
             if (MimeTypes.ContainsKey(extension))
                 return MimeTypes[extension];
             return DefaultMimeType;
         }
-        public async Task Handle(IHttpContext context, System.Func<Task> next)
-        {
-            var requestPath = context.Request.Uri.OriginalString.TrimStart('/');
-            
+
+        private string GetDefault() {
             var httpRoot = Path.GetFullPath(HttpRootDirectory ?? ".");
-            var path = Path.GetFullPath(Path.Combine(httpRoot, requestPath));
-
-            if (!File.Exists(path))
-            {
-                await next().ConfigureAwait(false);
-
-                return;
+            foreach (var @default in DefaultFiles) {
+                var path = Path.GetFullPath(Path.Combine(httpRoot, @default));
+                if (!File.Exists(path)) return @default;
             }
-                
-            context.Response = new HttpResponse(GetContentType(path), File.OpenRead(path), context.Request.Headers.KeepAliveConnection());
+
+            return string.Empty;
         }
     }
 }
