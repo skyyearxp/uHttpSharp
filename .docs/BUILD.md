@@ -36,6 +36,6 @@ So yeah. I have to explicitly target net461.
 
 ## Creating a releasing
 
-- Update the Version in uHttpSharp.csproj, the format should be X.X.X-suffix
+- Update the Version in uHttpSharp.csproj, the format should be X.X.X-suffix (with suffix being optional)
 - Create a new tag : `git tag X.X.X-suffix`
 - Push the tag `git push --tags` : this will trigger the build with the deployment on the appveyor

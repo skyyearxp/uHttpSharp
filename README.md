@@ -123,3 +123,7 @@ Percentage of the requests served within a certain time (ms)
 * Use it
 * Open Issues
 * Fork and Push requests
+
+## How to build
+
+See [this page](.docs/BUILD.md)
