@@ -71,7 +71,7 @@ namespace uhttpsharp.Handlers {
             var httpRoot = Path.GetFullPath(HttpRootDirectory ?? ".");
             foreach (var @default in DefaultFiles) {
                 var path = Path.GetFullPath(Path.Combine(httpRoot, @default));
-                if (!File.Exists(path)) return @default;
+                if (File.Exists(path)) return @default;
             }
 
             return string.Empty;
